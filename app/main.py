@@ -22,7 +22,7 @@ app = FastAPI(title="AI Voice Platform API")
 # Add CORS Middleware to enable interaction from React frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict to frontend domain
+    allow_origins=["https://voicetest112233.vercel.app"],  # In production, restrict to frontend domain
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
