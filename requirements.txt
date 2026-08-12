@@ -1,0 +1,15 @@
+fastapi>=0.111.0
+uvicorn>=0.30.0
+sqlalchemy>=2.0.0
+passlib[bcrypt]
+pyjwt>=2.8.0
+python-multipart>=0.0.9
+pydantic-settings>=2.3.0
+pydantic>=2.8.0
+cloudinary>=1.40.0
+gTTS>=2.5.0
+numpy>=1.26.0
+scipy>=1.13.0
+pytest>=8.2.0
+requests>=2.32.0
+soundfile>=0.12.0
