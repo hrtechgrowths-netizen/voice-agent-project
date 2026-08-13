@@ -8,7 +8,7 @@ import os
 from app.database import engine, Base, get_db
 from app.models import User, AudioFile
 from app.schemas import UserCreate, UserResponse, Token, AudioFileResponse, TTSRequest
-from app.auth import get_password_hash, verify_password, create_access_token, get_current_user
+from app.auth import get_password_hash, verify_password, create_access_token, get_or_create_development_user
 from app.services.cloudinary_service import upload_audio
 from app.services.tts_service import generate_speech
 from app.services.voice_cloning_service import clone_voice
@@ -69,7 +69,6 @@ def login(user_data: UserCreate, db: Session = Depends(get_db)):
 def generate_tts(
     request: TTSRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
 ):
     """
     Generate speech from a text prompt using Kokoro TTS (with fallback).
@@ -86,13 +85,14 @@ def generate_tts(
         title = f"TTS: {request.text[:30]}"
         url = upload_audio(audio_bytes, filename="tts.wav")
         
+        dev_user = get_or_create_development_user(db)
         db_audio = AudioFile(
             title=title,
             model_used="Kokoro TTS",
             voice_name=request.voice,
             cloudinary_url=url,
             duration=duration,
-            user_id=current_user.id
+            user_id=dev_user.id
         )
         db.add(db_audio)
         db.commit()
@@ -107,7 +107,6 @@ async def clone_voice_endpoint(
     voice_name: str = Form("cloned_voice"),
     reference_file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
 ):
     """
     Clone a voice from reference WAV/MP3 files and synthesizes the input text.
@@ -125,13 +124,14 @@ async def clone_voice_endpoint(
         title = f"Cloned: {text[:30]}"
         url = upload_audio(audio_bytes, filename="cloned.wav")
         
+        dev_user = get_or_create_development_user(db)
         db_audio = AudioFile(
             title=title,
             model_used="Pocket TTS Clone",
             voice_name=voice_name,
             cloudinary_url=url,
             duration=duration,
-            user_id=current_user.id
+            user_id=dev_user.id
         )
         db.add(db_audio)
         db.commit()
@@ -149,7 +149,6 @@ async def mix_voices_endpoint(
     audio1: Optional[UploadFile] = File(None),
     audio2: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
 ):
     """
     Blends two voices/audio sources together.
@@ -180,13 +179,14 @@ async def mix_voices_endpoint(
         
         url = upload_audio(mixed_bytes, filename="mixed.wav")
         
+        dev_user = get_or_create_development_user(db)
         db_audio = AudioFile(
             title=title,
             model_used="Speech Blend",
             voice_name=f"Blend {blend_ratio}",
             cloudinary_url=url,
             duration=duration,
-            user_id=current_user.id
+            user_id=dev_user.id
         )
         db.add(db_audio)
         db.commit()
@@ -196,8 +196,9 @@ async def mix_voices_endpoint(
         raise HTTPException(status_code=500, detail=f"Speech blending failed: {str(e)}")
 
 @app.get("/api/history", response_model=List[AudioFileResponse])
-def get_history(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_history(db: Session = Depends(get_db)):
     """
-    Fetch history of voice generations for the authenticated user.
+    Fetch history of voice generations for the shared development user.
     """
-    return db.query(AudioFile).filter(AudioFile.user_id == current_user.id).order_by(AudioFile.created_at.desc()).all()
+    dev_user = get_or_create_development_user(db)
+    return db.query(AudioFile).filter(AudioFile.user_id == dev_user.id).order_by(AudioFile.created_at.desc()).all()

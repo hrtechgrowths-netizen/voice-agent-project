@@ -11,6 +11,8 @@ from app.database import get_db
 from app.models import User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+AUTH_BYPASS_FOR_DEVELOPMENT = True
+DEVELOPMENT_USERNAME = "dev_user"
 
 # Use a custom oauth2 scheme that reads from Bearer header
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
@@ -40,11 +42,30 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
 
+def get_or_create_development_user(db: Session) -> User:
+    """
+    Returns a shared development user account for local bypass mode.
+    """
+    dev_user = db.query(User).filter(User.username == DEVELOPMENT_USERNAME).first()
+    if dev_user is None:
+        dev_user = User(
+            username=DEVELOPMENT_USERNAME,
+            hashed_password=get_password_hash("dev-only-password")
+        )
+        db.add(dev_user)
+        db.commit()
+        db.refresh(dev_user)
+    return dev_user
+
 def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     """
     Dependency that decodes the Bearer token, fetches the user, and returns it.
     If token is invalid or missing, raises 401 Unauthorized.
+    In development bypass mode, always returns a shared development user.
     """
+    if AUTH_BYPASS_FOR_DEVELOPMENT:
+        return get_or_create_development_user(db)
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
