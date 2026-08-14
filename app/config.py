@@ -7,9 +7,9 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     
-    CLOUDINARY_CLOUD_NAME: str = ""
-    CLOUDINARY_API_KEY: str = ""
-    CLOUDINARY_API_SECRET: str = ""
+    CLOUDINARY_CLOUD_NAME: str = "du8baffic"
+    CLOUDINARY_API_KEY: str = "672158762269852"
+    CLOUDINARY_API_SECRET: str = "oIyOIZJpWbVPjooVFfCoK420sLQ"
 
     class Config:
         env_file = ".env"
