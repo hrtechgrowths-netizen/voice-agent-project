@@ -1,16 +1,16 @@
 from datetime import datetime, timedelta
 from typing import Optional
+import bcrypt
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
 from app.models import User
+from utils.password_utils import check_password, hash_password
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 AUTH_BYPASS_FOR_DEVELOPMENT = True
 DEVELOPMENT_USERNAME = "dev_user"
 
@@ -21,13 +21,22 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     Verify plain password against hashed password.
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    hashed_password_bytes = hashed_password.encode("utf-8")
+    plain_password_bytes = plain_password.encode("utf-8")
+
+    try:
+        if bcrypt.checkpw(plain_password_bytes, hashed_password_bytes):
+            return True
+    except ValueError:
+        pass
+
+    return check_password(plain_password, hashed_password_bytes)
 
 def get_password_hash(password: str) -> str:
     """
     Generate bcrypt hash from plain text password.
     """
-    return pwd_context.hash(password)
+    return hash_password(password).decode("utf-8")
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """
