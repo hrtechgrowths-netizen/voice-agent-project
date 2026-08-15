@@ -16,17 +16,10 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         extra = "ignore"
-
-# 1. Settings ko initialize karein
 settings = Settings()
-
-# 2. Cloudinary ko initialize karna laazmi hai taaki usay api_key mil sakay
 cloudinary.config(
     cloud_name=settings.CLOUDINARY_CLOUD_NAME,
     api_key=settings.CLOUDINARY_API_KEY,
     api_secret=settings.CLOUDINARY_API_SECRET,
     secure=True
 )
-
-# 3. Yahan se top-level upload ka code delete kar diya hai taaki server start hote hi crash na ho.
-
