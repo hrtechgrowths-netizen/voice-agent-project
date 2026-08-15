@@ -4,7 +4,6 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
-
 from app.database import engine, Base, get_db
 from app.models import User, AudioFile
 from app.schemas import UserCreate, UserResponse, Token, AudioFileResponse, TTSRequest
@@ -13,13 +12,8 @@ from app.services.cloudinary_service import upload_audio
 from app.services.tts_service import generate_speech
 from app.services.voice_cloning_service import clone_voice
 from app.services.voice_mixing_service import blend_audio_waveforms
-
-# Create database tables
 Base.metadata.create_all(bind=engine)
-
 app = FastAPI(title="AI Voice Platform API")
-
-# Add CORS Middleware to enable interaction from React frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -29,12 +23,9 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
-
-# Mount static folder to serve fallback local audio files
 static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
 os.makedirs(static_dir, exist_ok=True)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
 @app.post("/api/auth/signup", response_model=UserResponse)
 def signup(user_data: UserCreate, db: Session = Depends(get_db)):
     """
@@ -43,15 +34,13 @@ def signup(user_data: UserCreate, db: Session = Depends(get_db)):
     """
     db_user = db.query(User).filter(User.username == user_data.username).first()
     if db_user:
-        raise HTTPException(status_code=400, detail="Username already registered")
-    
+        raise HTTPException(status_code=400, detail="Username already registered")  
     hashed_password = get_password_hash(user_data.password)
     new_user = User(username=user_data.username, hashed_password=hashed_password)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     return new_user
-
 @app.post("/api/auth/login", response_model=Token)
 def login(user_data: UserCreate, db: Session = Depends(get_db)):
     """
@@ -60,11 +49,9 @@ def login(user_data: UserCreate, db: Session = Depends(get_db)):
     """
     user = db.query(User).filter(User.username == user_data.username).first()
     if not user or not verify_password(user_data.password, user.hashed_password):
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
-    
+        raise HTTPException(status_code=400, detail="Incorrect username or password")   
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
-
 @app.post("/api/tts/generate", response_model=AudioFileResponse)
 def generate_tts(
     request: TTSRequest,
@@ -80,11 +67,9 @@ def generate_tts(
             voice=request.voice,
             speed=request.speed,
             pitch=request.pitch
-        )
-        
+        )      
         title = f"TTS: {request.text[:30]}"
-        url = upload_audio(audio_bytes, filename="tts.wav")
-        
+        url = upload_audio(audio_bytes, filename="tts.wav")      
         dev_user = get_or_create_development_user(db)
         db_audio = AudioFile(
             title=title,
@@ -100,7 +85,6 @@ def generate_tts(
         return db_audio
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Speech generation failed: {str(e)}")
-
 @app.post("/api/voice-cloning/clone", response_model=AudioFileResponse)
 async def clone_voice_endpoint(
     text: str = Form(...),
@@ -113,17 +97,14 @@ async def clone_voice_endpoint(
     Uploads output to Cloudinary/local storage and saves metadata.
     """
     try:
-        ref_bytes = await reference_file.read()
-        
+        ref_bytes = await reference_file.read()      
         audio_bytes, duration = clone_voice(
             text=text,
             reference_audio_bytes=ref_bytes,
             voice_name=voice_name
-        )
-        
+        )     
         title = f"Cloned: {text[:30]}"
-        url = upload_audio(audio_bytes, filename="cloned.wav")
-        
+        url = upload_audio(audio_bytes, filename="cloned.wav")  
         dev_user = get_or_create_development_user(db)
         db_audio = AudioFile(
             title=title,
@@ -139,7 +120,6 @@ async def clone_voice_endpoint(
         return db_audio
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Voice cloning failed: {str(e)}")
-
 @app.post("/api/voice-mixing/blend", response_model=AudioFileResponse)
 async def mix_voices_endpoint(
     text: Optional[str] = Form(None),
@@ -169,16 +149,13 @@ async def mix_voices_endpoint(
             raise HTTPException(
                 status_code=400,
                 detail="Must provide either prompt text/voice1/voice2, OR two uploaded files to blend."
-            )
-            
+            )        
         mixed_bytes, duration = blend_audio_waveforms(
             audio1_bytes=audio1_bytes,
             audio2_bytes=audio2_bytes,
             blend_ratio=blend_ratio
-        )
-        
-        url = upload_audio(mixed_bytes, filename="mixed.wav")
-        
+        )    
+        url = upload_audio(mixed_bytes, filename="mixed.wav")    
         dev_user = get_or_create_development_user(db)
         db_audio = AudioFile(
             title=title,
@@ -194,7 +171,6 @@ async def mix_voices_endpoint(
         return db_audio
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Speech blending failed: {str(e)}")
-
 @app.get("/api/history", response_model=List[AudioFileResponse])
 def get_history(db: Session = Depends(get_db)):
     """
@@ -202,25 +178,17 @@ def get_history(db: Session = Depends(get_db)):
     """
     dev_user = get_or_create_development_user(db)
     return db.query(AudioFile).filter(AudioFile.user_id == dev_user.id).order_by(AudioFile.created_at.desc()).all()
-    from fastapi import FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware  # 1. Yeh import add karein
-
-app = FastAPI()
-
-# 2. In origins ki list mein apne Vercel ka URL add karein
 origins = [
     "https://voice-agent-project-pst5-6sr4w4ly3.vercel.app",
-    "http://localhost:3000",  # Local testing ke liye
+    "http://localhost:3000",  
 ]
-
-# 3. Yeh middleware config add karein (App definition ke foran baad)
+app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  
     allow_credentials=True,
-    allow_methods=["*"],  # Saare methods (GET, POST, etc.) allow karein
-    allow_headers=["*"],  # Saare headers allow karein
+    allow_methods=["*"],  
+    allow_headers=["*"],  
 )
-
-# ... aapka baaki ka code yahan chalega ...
-
