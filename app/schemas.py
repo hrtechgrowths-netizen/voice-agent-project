@@ -5,7 +5,6 @@ from typing import Optional, List
 class UserCreate(BaseModel):
     """
     Pydantic schema for creating a new user (Signup).
-    Requires a username (min 3 chars) and a password (min 6 chars).
     """
     username: str = Field(..., min_length=3, max_length=50)
     password: str = Field(..., min_length=6)
@@ -57,4 +56,3 @@ class TTSRequest(BaseModel):
     voice: str = "af_heart"
     speed: float = Field(1.0, ge=0.5, le=2.0)
     pitch: float = Field(1.0, ge=0.5, le=2.0)
-
