@@ -4,12 +4,11 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
+import json
 
 from app.database import engine, Base, get_db
 from app.models import User, AudioFile
 from app.schemas import UserCreate, UserResponse, Token, AudioFileResponse, TTSRequest
-
-# 1. FIXED: Missing import 'get_or_create_development_user' yahan add kar diya hai
 from app.auth import get_password_hash, verify_password, create_access_token, get_or_create_development_user
 
 from app.services.cloudinary_service import upload_audio
@@ -21,7 +20,6 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="AI Voice Platform API")
 
-# 2. FIXED: CORS configuration ko global wildcard "*" kar diya taake koi bhi Vercel URL block na ho
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -60,6 +58,7 @@ def generate_tts(
     db: Session = Depends(get_db),
 ):
     try:
+        print(f"\n[TTS] Generating speech for text: '{request.text[:30]}...'")
         audio_bytes, duration = generate_speech(
             text=request.text,
             voice=request.voice,
@@ -67,8 +66,14 @@ def generate_tts(
             pitch=request.pitch
         )      
         title = f"TTS: {request.text[:30]}"
+        
+        print("[CLOUDINARY] Uploading TTS audio...")
         url = upload_audio(audio_bytes, filename="tts.wav")      
+        print(f"[CLOUDINARY SUCCESS] Hosted URL -> {url}")
+        
         dev_user = get_or_create_development_user(db)
+        print(f"[DATABASE] Saving record for User ID: {dev_user.id}")
+        
         db_audio = AudioFile(
             title=title,
             model_used="Kokoro TTS",
@@ -82,6 +87,7 @@ def generate_tts(
         db.refresh(db_audio)
         return db_audio
     except Exception as e:
+        print(f"[BACKEND ERROR IN TTS]: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Speech generation failed: {str(e)}")
 
 @app.post("/api/voice-cloning/clone", response_model=AudioFileResponse)
@@ -92,6 +98,7 @@ async def clone_voice_endpoint(
     db: Session = Depends(get_db),
 ):
     try:
+        print(f"\n[CLONING] Cloning voice '{voice_name}' for text: '{text[:30]}...'")
         ref_bytes = await reference_file.read()      
         audio_bytes, duration = clone_voice(
             text=text,
@@ -99,8 +106,14 @@ async def clone_voice_endpoint(
             voice_name=voice_name
         )     
         title = f"Cloned: {text[:30]}"
+        
+        print("[CLOUDINARY] Uploading cloned audio...")
         url = upload_audio(audio_bytes, filename="cloned.wav")  
+        print(f"[CLOUDINARY SUCCESS] Hosted URL -> {url}")
+        
         dev_user = get_or_create_development_user(db)
+        print(f"[DATABASE] Saving record for User ID: {dev_user.id}")
+        
         db_audio = AudioFile(
             title=title,
             model_used="Pocket TTS Clone",
@@ -114,6 +127,7 @@ async def clone_voice_endpoint(
         db.refresh(db_audio)
         return db_audio
     except Exception as e:
+        print(f"[BACKEND ERROR IN CLONING]: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Voice cloning failed: {str(e)}")
 
 @app.post("/api/voice-mixing/blend", response_model=AudioFileResponse)
@@ -127,6 +141,7 @@ async def mix_voices_endpoint(
     db: Session = Depends(get_db),
 ):
     try:
+        print("\n[BLENDING] Initiating voice blending stack...")
         if audio1 and audio2:
             audio1_bytes = await audio1.read()
             audio2_bytes = await audio2.read()
@@ -145,8 +160,14 @@ async def mix_voices_endpoint(
             audio2_bytes=audio2_bytes,
             blend_ratio=blend_ratio
         )    
+        
+        print("[CLOUDINARY] Uploading blended audio...")
         url = upload_audio(mixed_bytes, filename="mixed.wav")    
+        print(f"[CLOUDINARY SUCCESS] Hosted URL -> {url}")
+        
         dev_user = get_or_create_development_user(db)
+        print(f"[DATABASE] Saving record for User ID: {dev_user.id}")
+        
         db_audio = AudioFile(
             title=title,
             model_used="Speech Blend",
@@ -160,11 +181,17 @@ async def mix_voices_endpoint(
         db.refresh(db_audio)
         return db_audio
     except Exception as e:
+        print(f"[BACKEND ERROR IN BLENDING]: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Speech blending failed: {str(e)}")
 
 @app.get("/api/history", response_model=List[AudioFileResponse])
 def get_history(db: Session = Depends(get_db)):
-    dev_user = get_or_create_development_user(db)
-    return db.query(AudioFile).filter(AudioFile.user_id == dev_user.id).order_by(AudioFile.created_at.desc()).all()
-
-# 3. FIXED: Niche mojood saara extra duplicate aur adhoora code permanently mita diya gaya hai.
+    try:
+        print("\n[HISTORY] Fetching records from database...")
+        dev_user = get_or_create_development_user(db)
+        records = db.query(AudioFile).filter(AudioFile.user_id == dev_user.id).order_by(AudioFile.created_at.desc()).all()
+        print(f"[HISTORY SUCCESS] Found {len(records)} records for user '{dev_user.username}'")
+        return records
+    except Exception as e:
+        print(f"[BACKEND ERROR IN HISTORY]: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"History fetch failed: {str(e)}")
