@@ -202,3 +202,25 @@ def get_history(db: Session = Depends(get_db)):
     """
     dev_user = get_or_create_development_user(db)
     return db.query(AudioFile).filter(AudioFile.user_id == dev_user.id).order_by(AudioFile.created_at.desc()).all()
+    from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware  # 1. Yeh import add karein
+
+app = FastAPI()
+
+# 2. In origins ki list mein apne Vercel ka URL add karein
+origins = [
+    "https://voice-agent-project-pst5-6sr4w4ly3.vercel.app",
+    "http://localhost:3000",  # Local testing ke liye
+]
+
+# 3. Yeh middleware config add karein (App definition ke foran baad)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],  # Saare methods (GET, POST, etc.) allow karein
+    allow_headers=["*"],  # Saare headers allow karein
+)
+
+# ... aapka baaki ka code yahan chalega ...
+
