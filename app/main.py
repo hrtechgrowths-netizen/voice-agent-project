@@ -8,7 +8,7 @@ import os
 from app.database import engine, Base, get_db
 from app.models import User, AudioFile
 from app.schemas import UserCreate, UserResponse, Token, AudioFileResponse, TTSRequest
-from app.auth import get_password_hash, verify_password, create_access_token, get_or_create_development_user
+from app.auth import get_password_hash, verify_password, create_access_token
 from app.services.cloudinary_service import upload_audio
 from app.services.tts_service import generate_speech
 from app.services.voice_cloning_service import clone_voice
