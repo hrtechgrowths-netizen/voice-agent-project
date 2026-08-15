@@ -65,3 +65,26 @@ def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session 
     def get_or_create_development_user(db = None):
          print("Development user initialized")
          return {"username": "dev_user", "role": "admin"}
+# ==========================================
+# FIXED: Missing Development User Function
+# ==========================================
+def get_or_create_development_user(db):
+    """
+    Finds the default development user in the database.
+    If it doesn't exist, it creates one automatically.
+    """
+    from app.models import User
+    
+    # Database mein check karein ke kya 'dev_user' pehle se hai?
+    dev_user = db.query(User).filter(User.username == "dev_user").first()
+    
+    if not dev_user:
+        # Agar nahi hai toh naya dev_user banaein
+        hashed_pw = get_password_hash("dev_password123")
+        dev_user = User(username="dev_user", hashed_password=hashed_pw)
+        db.add(dev_user)
+        db.commit()
+        db.refresh(dev_user)
+        print("Successfully created a new development user profile.")
+        
+    return dev_user
