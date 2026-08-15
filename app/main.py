@@ -8,17 +8,21 @@ import os
 from app.database import engine, Base, get_db
 from app.models import User, AudioFile
 from app.schemas import UserCreate, UserResponse, Token, AudioFileResponse, TTSRequest
-from app.auth import get_password_hash, verify_password, create_access_token, get_current_user
+from app.auth import get_password_hash, verify_password, create_access_token, get_or_create_development_user
+
 from app.services.cloudinary_service import upload_audio
 from app.services.tts_service import generate_speech
 from app.services.voice_cloning_service import clone_voice
 from app.services.voice_mixing_service import blend_audio_waveforms
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="AI Voice Platform API")
+
+# Global CORS Security Policy
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -27,15 +31,12 @@ app.add_middleware(
 static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
 os.makedirs(static_dir, exist_ok=True)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
 @app.post("/api/auth/signup", response_model=UserResponse)
 def signup(user_data: UserCreate, db: Session = Depends(get_db)):
-    """
-    Register a new user account.
-    Checks if username exists; if not, hashes password and saves.
-    """
     db_user = db.query(User).filter(User.username == user_data.username).first()
     if db_user:
-        raise HTTPException(status_code=400, detail="Username already registered") 
+        raise HTTPException(status_code=400, detail="Username already registered")  
     hashed_password = get_password_hash(user_data.password)
     new_user = User(username=user_data.username, hashed_password=hashed_password)
     db.add(new_user)
@@ -45,14 +46,9 @@ def signup(user_data: UserCreate, db: Session = Depends(get_db)):
 
 @app.post("/api/auth/login", response_model=Token)
 def login(user_data: UserCreate, db: Session = Depends(get_db)):
-    """
-    Authenticate a user.
-    Validates password and returns a JWT token.
-    """
     user = db.query(User).filter(User.username == user_data.username).first()
     if not user or not verify_password(user_data.password, user.hashed_password):
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
-    
+        raise HTTPException(status_code=400, detail="Incorrect username or password")   
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -60,30 +56,24 @@ def login(user_data: UserCreate, db: Session = Depends(get_db)):
 def generate_tts(
     request: TTSRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
 ):
-    """
-    Generate speech from a text prompt using Kokoro TTS (with fallback).
-    Uploads output to Cloudinary/local storage and saves metadata.
-    """
     try:
         audio_bytes, duration = generate_speech(
             text=request.text,
             voice=request.voice,
             speed=request.speed,
             pitch=request.pitch
-        )
-        
+        )      
         title = f"TTS: {request.text[:30]}"
-        url = upload_audio(audio_bytes, filename="tts.wav")
-        
+        url = upload_audio(audio_bytes, filename="tts.wav")      
+        dev_user = get_or_create_development_user(db)
         db_audio = AudioFile(
             title=title,
             model_used="Kokoro TTS",
             voice_name=request.voice,
             cloudinary_url=url,
             duration=duration,
-            user_id=current_user.id
+            user_id=dev_user.id
         )
         db.add(db_audio)
         db.commit()
@@ -98,31 +88,24 @@ async def clone_voice_endpoint(
     voice_name: str = Form("cloned_voice"),
     reference_file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
 ):
-    """
-    Clone a voice from reference WAV/MP3 files and synthesizes the input text.
-    Uploads output to Cloudinary/local storage and saves metadata.
-    """
     try:
-        ref_bytes = await reference_file.read()
-        
+        ref_bytes = await reference_file.read()      
         audio_bytes, duration = clone_voice(
             text=text,
             reference_audio_bytes=ref_bytes,
             voice_name=voice_name
-        )
-        
+        )     
         title = f"Cloned: {text[:30]}"
-        url = upload_audio(audio_bytes, filename="cloned.wav")
-        
+        url = upload_audio(audio_bytes, filename="cloned.wav")  
+        dev_user = get_or_create_development_user(db)
         db_audio = AudioFile(
             title=title,
             model_used="Pocket TTS Clone",
             voice_name=voice_name,
             cloudinary_url=url,
             duration=duration,
-            user_id=current_user.id
+            user_id=dev_user.id
         )
         db.add(db_audio)
         db.commit()
@@ -140,14 +123,7 @@ async def mix_voices_endpoint(
     audio1: Optional[UploadFile] = File(None),
     audio2: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
 ):
-    """
-    Blends two voices/audio sources together.
-    Accepts EITHER:
-    1. Uploaded audio1 and audio2 files.
-    2. Prompt text + voice1 + voice2 (generates both first, then blends).
-    """
     try:
         if audio1 and audio2:
             audio1_bytes = await audio1.read()
@@ -161,23 +137,21 @@ async def mix_voices_endpoint(
             raise HTTPException(
                 status_code=400,
                 detail="Must provide either prompt text/voice1/voice2, OR two uploaded files to blend."
-            )
-            
+            )        
         mixed_bytes, duration = blend_audio_waveforms(
             audio1_bytes=audio1_bytes,
             audio2_bytes=audio2_bytes,
             blend_ratio=blend_ratio
-        )
-        
-        url = upload_audio(mixed_bytes, filename="mixed.wav")
-        
+        )    
+        url = upload_audio(mixed_bytes, filename="mixed.wav")    
+        dev_user = get_or_create_development_user(db)
         db_audio = AudioFile(
             title=title,
             model_used="Speech Blend",
             voice_name=f"Blend {blend_ratio}",
             cloudinary_url=url,
             duration=duration,
-            user_id=current_user.id
+            user_id=dev_user.id
         )
         db.add(db_audio)
         db.commit()
@@ -187,8 +161,7 @@ async def mix_voices_endpoint(
         raise HTTPException(status_code=500, detail=f"Speech blending failed: {str(e)}")
 
 @app.get("/api/history", response_model=List[AudioFileResponse])
-def get_history(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """
-    Fetch history of voice generations for the authenticated user.
-    """
-    return db.query(AudioFile).filter(AudioFile.user_id == current_user.id).order_by(AudioFile.created_at.desc()).all()
+def get_history(db: Session = Depends(get_db)):
+    dev_user = get_or_create_development_user(db)
+    return db.query(AudioFile).filter(AudioFile.user_id == dev_user.id).order_by(AudioFile.created_at.desc()).all()
+
