@@ -34,26 +34,46 @@ class TokenData(BaseModel):
     """
     username: Optional[str] = None
 
-class AudioFileResponse(BaseModel):
+# ==========================================
+# UPDATED: NEW CRYPTO DATA VALIDATION SCHEMAS
+# ==========================================
+
+class CryptoAnalysisResponse(BaseModel):
     """
-    Pydantic schema for returning history records of audio generations.
+    Pydantic schema for returning history records of crypto engine calculations.
+    Replaces AudioFileResponse.
     """
     id: int
     title: str
-    model_used: str
-    voice_name: Optional[str] = None
-    cloudinary_url: str
-    duration: float
+    engine_used: str
+    target_asset: str
+    structured_data_url: str
+    score_metric: float
     created_at: datetime
 
     class Config:
         from_attributes = True
 
-class TTSRequest(BaseModel):
+class MarketRequest(BaseModel):
     """
-    Pydantic request body schema for Kokoro TTS voice generation.
+    Validation schema for Market Analysis requests.
+    Replaces TTSRequest.
     """
-    text: str = Field(..., min_length=1)
-    voice: str = "af_heart"
-    speed: float = Field(1.0, ge=0.5, le=2.0)
-    pitch: float = Field(1.0, ge=0.5, le=2.0)
+    token_symbol: str = Field(..., min_length=2, max_length=10) 
+    timeframe: str = "4h"                                       
+    indicators: List[str] = ["RSI", "MACD", "EMA"]
+
+class SignalRequest(BaseModel):
+    """
+    Validation schema for Alpha Trade Signal triggers.
+    """
+    token_symbol: str = Field(..., min_length=2, max_length=10)
+    risk_tolerance: str = "medium"                              # E.g., "low", "medium", "high"
+
+class RebalanceRequest(BaseModel):
+    """
+    Validation schema for DeFi Portfolio structural balancing.
+    """
+    asset_one: str = Field(..., min_length=2, max_length=10)    # E.g., "BTC"
+    asset_two: str = Field(..., min_length=2, max_length=10)    # E.g., "ETH"
+    blend_ratio: float = Field(0.5, ge=0.0, le=1.0)             # Target weight structure
