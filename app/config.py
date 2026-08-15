@@ -16,3 +16,11 @@ class Settings(BaseSettings):
         extra = "ignore"
 
 settings = Settings()
+import cloudinary.uploader
+
+result = cloudinary.uploader.upload("generated_audio.mp3", 
+  resource_type="video",
+  folder="my-voice-project"
+)
+
+print(result['secure_url'])
