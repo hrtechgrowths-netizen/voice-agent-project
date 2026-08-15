@@ -10,7 +10,7 @@ class User(Base):
     """
     __tablename__ = "users"
 
-    id = Column(Integer, primary key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -24,7 +24,7 @@ class AudioFile(Base):
     """
     __tablename__ = "audio_files"
 
-    id = Column(Integer, primary key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     model_used = Column(String, nullable=False)  # "Kokoro TTS", "Pocket TTS Clone", "Speech Blend"
     voice_name = Column(String, nullable=True)
