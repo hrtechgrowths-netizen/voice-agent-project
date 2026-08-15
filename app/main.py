@@ -4,34 +4,38 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
+
 from app.database import engine, Base, get_db
 from app.models import User, AudioFile
 from app.schemas import UserCreate, UserResponse, Token, AudioFileResponse, TTSRequest
-from app.auth import get_password_hash, verify_password, create_access_token
+
+# 1. FIXED: Missing import 'get_or_create_development_user' yahan add kar diya hai
+from app.auth import get_password_hash, verify_password, create_access_token, get_or_create_development_user
+
 from app.services.cloudinary_service import upload_audio
 from app.services.tts_service import generate_speech
 from app.services.voice_cloning_service import clone_voice
 from app.services.voice_mixing_service import blend_audio_waveforms
+
 Base.metadata.create_all(bind=engine)
+
 app = FastAPI(title="AI Voice Platform API")
+
+# 2. FIXED: CORS configuration ko global wildcard "*" kar diya taake koi bhi Vercel URL block na ho
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://voicetest112233.vercel.app",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
+
 static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
 os.makedirs(static_dir, exist_ok=True)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
 @app.post("/api/auth/signup", response_model=UserResponse)
 def signup(user_data: UserCreate, db: Session = Depends(get_db)):
-    """
-    Register a new user account.
-    Checks if username exists; if not, hashes password and saves.
-    """
     db_user = db.query(User).filter(User.username == user_data.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")  
@@ -41,26 +45,20 @@ def signup(user_data: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
     return new_user
+
 @app.post("/api/auth/login", response_model=Token)
 def login(user_data: UserCreate, db: Session = Depends(get_db)):
-    """
-    Authenticate a user.
-    Validates password and returns a JWT token.
-    """
     user = db.query(User).filter(User.username == user_data.username).first()
     if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect username or password")   
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
+
 @app.post("/api/tts/generate", response_model=AudioFileResponse)
 def generate_tts(
     request: TTSRequest,
     db: Session = Depends(get_db),
 ):
-    """
-    Generate speech from a text prompt using Kokoro TTS (with fallback).
-    Uploads output to Cloudinary/local storage and saves metadata.
-    """
     try:
         audio_bytes, duration = generate_speech(
             text=request.text,
@@ -85,6 +83,7 @@ def generate_tts(
         return db_audio
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Speech generation failed: {str(e)}")
+
 @app.post("/api/voice-cloning/clone", response_model=AudioFileResponse)
 async def clone_voice_endpoint(
     text: str = Form(...),
@@ -92,10 +91,6 @@ async def clone_voice_endpoint(
     reference_file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    """
-    Clone a voice from reference WAV/MP3 files and synthesizes the input text.
-    Uploads output to Cloudinary/local storage and saves metadata.
-    """
     try:
         ref_bytes = await reference_file.read()      
         audio_bytes, duration = clone_voice(
@@ -120,6 +115,7 @@ async def clone_voice_endpoint(
         return db_audio
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Voice cloning failed: {str(e)}")
+
 @app.post("/api/voice-mixing/blend", response_model=AudioFileResponse)
 async def mix_voices_endpoint(
     text: Optional[str] = Form(None),
@@ -130,12 +126,6 @@ async def mix_voices_endpoint(
     audio2: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
 ):
-    """
-    Blends two voices/audio sources together.
-    Accepts EITHER:
-    1. Uploaded audio1 and audio2 files.
-    2. Prompt text + voice1 + voice2 (generates both first, then blends).
-    """
     try:
         if audio1 and audio2:
             audio1_bytes = await audio1.read()
@@ -171,24 +161,10 @@ async def mix_voices_endpoint(
         return db_audio
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Speech blending failed: {str(e)}")
+
 @app.get("/api/history", response_model=List[AudioFileResponse])
 def get_history(db: Session = Depends(get_db)):
-    """
-    Fetch history of voice generations for the shared development user.
-    """
     dev_user = get_or_create_development_user(db)
     return db.query(AudioFile).filter(AudioFile.user_id == dev_user.id).order_by(AudioFile.created_at.desc()).all()
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware  # 1. Yeh import add karein
-origins = [
-    "https://voice-agent-project-pst5-6sr4w4ly3.vercel.app",
-    "http://localhost:3000",  
-]
-app = FastAPI()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  
-    allow_credentials=True,
-    allow_methods=["*"],  
-    allow_headers=["*"],  
-)
+
+# 3. FIXED: Niche mojood saara extra duplicate aur adhoora code permanently mita diya gaya hai.
