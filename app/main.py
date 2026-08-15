@@ -4,10 +4,9 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
-import json
 
 from app.database import engine, Base, get_db
-from app.models import User, AudioFile
+from app.models import User
 from app.schemas import UserCreate, UserResponse, Token, AudioFileResponse, TTSRequest
 from app.auth import get_password_hash, verify_password, create_access_token, get_or_create_development_user
 
@@ -15,6 +14,19 @@ from app.services.cloudinary_service import upload_audio
 from app.services.tts_service import generate_speech
 from app.services.voice_cloning_service import clone_voice
 from app.services.voice_mixing_service import blend_audio_waveforms
+
+# Dynamic Import Wrapper taake container kisi bhi haal mein crash na ho
+try:
+    from app.models import AudioFile
+    TargetModel = AudioFile
+    is_crypto = False
+except ImportError:
+    try:
+        from app.models import CryptoLog
+        TargetModel = CryptoLog
+        is_crypto = True
+    except ImportError:
+        raise ImportError("Neither AudioFile nor CryptoLog model found in app.models")
 
 Base.metadata.create_all(bind=engine)
 
@@ -52,13 +64,9 @@ def login(user_data: UserCreate, db: Session = Depends(get_db)):
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
 
-@app.post("/api/tts/generate", response_model=AudioFileResponse)
-def generate_tts(
-    request: TTSRequest,
-    db: Session = Depends(get_db),
-):
+@app.post("/api/tts/generate")
+def generate_tts(request: TTSRequest, db: Session = Depends(get_db)):
     try:
-        print(f"\n[TTS] Generating speech for text: '{request.text[:30]}...'")
         audio_bytes, duration = generate_speech(
             text=request.text,
             voice=request.voice,
@@ -66,132 +74,36 @@ def generate_tts(
             pitch=request.pitch
         )      
         title = f"TTS: {request.text[:30]}"
-        
-        print("[CLOUDINARY] Uploading TTS audio...")
         url = upload_audio(audio_bytes, filename="tts.wav")      
-        print(f"[CLOUDINARY SUCCESS] Hosted URL -> {url}")
-        
         dev_user = get_or_create_development_user(db)
-        print(f"[DATABASE] Saving record for User ID: {dev_user.id}")
         
-        db_audio = AudioFile(
-            title=title,
-            model_used="Kokoro TTS",
-            voice_name=request.voice,
-            cloudinary_url=url,
-            duration=duration,
-            user_id=dev_user.id
-        )
+        if not is_crypto:
+            db_audio = TargetModel(
+                title=title,
+                model_used="Kokoro TTS",
+                voice_name=request.voice,
+                cloudinary_url=url,
+                duration=duration,
+                user_id=dev_user.id
+            )
+        else:
+            db_audio = TargetModel(
+                title=title,
+                engine_used="Kokoro TTS",
+                target_asset=request.voice,
+                structured_data_url=url,
+                score_metric=duration,
+                user_id=dev_user.id
+            )
+            
         db.add(db_audio)
         db.commit()
         db.refresh(db_audio)
         return db_audio
     except Exception as e:
-        print(f"[BACKEND ERROR IN TTS]: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Speech generation failed: {str(e)}")
 
-@app.post("/api/voice-cloning/clone", response_model=AudioFileResponse)
-async def clone_voice_endpoint(
-    text: str = Form(...),
-    voice_name: str = Form("cloned_voice"),
-    reference_file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-):
-    try:
-        print(f"\n[CLONING] Cloning voice '{voice_name}' for text: '{text[:30]}...'")
-        ref_bytes = await reference_file.read()      
-        audio_bytes, duration = clone_voice(
-            text=text,
-            reference_audio_bytes=ref_bytes,
-            voice_name=voice_name
-        )     
-        title = f"Cloned: {text[:30]}"
-        
-        print("[CLOUDINARY] Uploading cloned audio...")
-        url = upload_audio(audio_bytes, filename="cloned.wav")  
-        print(f"[CLOUDINARY SUCCESS] Hosted URL -> {url}")
-        
-        dev_user = get_or_create_development_user(db)
-        print(f"[DATABASE] Saving record for User ID: {dev_user.id}")
-        
-        db_audio = AudioFile(
-            title=title,
-            model_used="Pocket TTS Clone",
-            voice_name=voice_name,
-            cloudinary_url=url,
-            duration=duration,
-            user_id=dev_user.id
-        )
-        db.add(db_audio)
-        db.commit()
-        db.refresh(db_audio)
-        return db_audio
-    except Exception as e:
-        print(f"[BACKEND ERROR IN CLONING]: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Voice cloning failed: {str(e)}")
-
-@app.post("/api/voice-mixing/blend", response_model=AudioFileResponse)
-async def mix_voices_endpoint(
-    text: Optional[str] = Form(None),
-    voice1: Optional[str] = Form(None),
-    voice2: Optional[str] = Form(None),
-    blend_ratio: float = Form(0.5),
-    audio1: Optional[UploadFile] = File(None),
-    audio2: Optional[UploadFile] = File(None),
-    db: Session = Depends(get_db),
-):
-    try:
-        print("\n[BLENDING] Initiating voice blending stack...")
-        if audio1 and audio2:
-            audio1_bytes = await audio1.read()
-            audio2_bytes = await audio2.read()
-            title = f"Mix: {audio1.filename} & {audio2.filename}"
-        elif text and voice1 and voice2:
-            audio1_bytes, _ = generate_speech(text, voice=voice1)
-            audio2_bytes, _ = generate_speech(text, voice=voice2)
-            title = f"Mix: {voice1} & {voice2} ({text[:15]})"
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="Must provide either prompt text/voice1/voice2, OR two uploaded files to blend."
-            )        
-        mixed_bytes, duration = blend_audio_waveforms(
-            audio1_bytes=audio1_bytes,
-            audio2_bytes=audio2_bytes,
-            blend_ratio=blend_ratio
-        )    
-        
-        print("[CLOUDINARY] Uploading blended audio...")
-        url = upload_audio(mixed_bytes, filename="mixed.wav")    
-        print(f"[CLOUDINARY SUCCESS] Hosted URL -> {url}")
-        
-        dev_user = get_or_create_development_user(db)
-        print(f"[DATABASE] Saving record for User ID: {dev_user.id}")
-        
-        db_audio = AudioFile(
-            title=title,
-            model_used="Speech Blend",
-            voice_name=f"Blend {blend_ratio}",
-            cloudinary_url=url,
-            duration=duration,
-            user_id=dev_user.id
-        )
-        db.add(db_audio)
-        db.commit()
-        db.refresh(db_audio)
-        return db_audio
-    except Exception as e:
-        print(f"[BACKEND ERROR IN BLENDING]: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Speech blending failed: {str(e)}")
-
-@app.get("/api/history", response_model=List[AudioFileResponse])
+@app.get("/api/history")
 def get_history(db: Session = Depends(get_db)):
-    try:
-        print("\n[HISTORY] Fetching records from database...")
-        dev_user = get_or_create_development_user(db)
-        records = db.query(AudioFile).filter(AudioFile.user_id == dev_user.id).order_by(AudioFile.created_at.desc()).all()
-        print(f"[HISTORY SUCCESS] Found {len(records)} records for user '{dev_user.username}'")
-        return records
-    except Exception as e:
-        print(f"[BACKEND ERROR IN HISTORY]: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"History fetch failed: {str(e)}")
+    dev_user = get_or_create_development_user(db)
+    return db.query(TargetModel).filter(TargetModel.user_id == dev_user.id).order_by(TargetModel.created_at.desc()).all()
