@@ -5,21 +5,16 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
-
 from app.database import engine, Base, get_db
 from app.models import User, AudioFile
 from app.schemas import UserCreate, UserResponse, Token, AudioFileResponse, TTSRequest
-from app.auth import get_password_hash, verify_password, create_access_token, get_or_create_development_user
-
+from app.auth import get_password_hash, verify_password, create_access_token
 from app.services.cloudinary_service import upload_audio
 from app.services.tts_service import generate_speech
 from app.services.voice_cloning_service import clone_voice
 from app.services.voice_mixing_service import blend_audio_waveforms
-
 Base.metadata.create_all(bind=engine)
-
 app = FastAPI(title="AI Voice Platform API")
-
 # 1. FIXED CORS POLICY: Explicitly forcing wildcard tracking
 app.add_middleware(
     CORSMiddleware,
@@ -178,3 +173,4 @@ async def mix_voices_endpoint(
 def get_history(db: Session = Depends(get_db)):
     dev_user = get_or_create_development_user(db)
     return db.query(AudioFile).filter(AudioFile.user_id == dev_user.id).order_by(AudioFile.created_at.desc()).all()
+    from app.auth import get_password_hash, verify_password, create_access_token
