@@ -1,11 +1,18 @@
-from fastapi import (FastAPI,Depends,HTTPException,status,UploadFile,File,Form,)
+from fastapi import (
+    FastAPI,
+    Depends,
+    HTTPException,
+    status,
+    UploadFile,
+    File,
+    Form,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+
 from app.database import engine, Base, get_db
 from app.models import User, AudioFile
 from app.schemas import (
@@ -46,8 +53,6 @@ app = FastAPI(title="AI Voice Platform API")
 # CORS
 # ============================================================
 
-from fastapi.middleware.cors import CORSMiddleware
-app = FastAPI(title="AI Voice Platform API")
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"https://.*\.vercel\.app",
@@ -55,6 +60,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # ============================================================
 # STATIC FILES
@@ -268,13 +274,8 @@ async def mix_voices_endpoint(
     db: Session = Depends(get_db),
 ):
     try:
-
-        # ----------------------------------------------------
-        # Option 1: Two uploaded audio files
-        # ----------------------------------------------------
-
+        # Two uploaded audio files
         if audio1 and audio2:
-
             audio1_bytes = await audio1.read()
             audio2_bytes = await audio2.read()
 
@@ -283,12 +284,8 @@ async def mix_voices_endpoint(
                 f"{audio2.filename}"
             )
 
-        # ----------------------------------------------------
-        # Option 2: Generate two voices from text
-        # ----------------------------------------------------
-
+        # Generate two voices from text
         elif text and voice1 and voice2:
-
             audio1_bytes, _ = generate_speech(
                 text,
                 voice=voice1,
@@ -304,10 +301,6 @@ async def mix_voices_endpoint(
                 f"{voice2} ({text[:15]})"
             )
 
-        # ----------------------------------------------------
-        # Invalid request
-        # ----------------------------------------------------
-
         else:
             raise HTTPException(
                 status_code=400,
@@ -317,34 +310,18 @@ async def mix_voices_endpoint(
                 ),
             )
 
-        # ----------------------------------------------------
-        # Blend audio
-        # ----------------------------------------------------
-
         mixed_bytes, duration = blend_audio_waveforms(
             audio1_bytes=audio1_bytes,
             audio2_bytes=audio2_bytes,
             blend_ratio=blend_ratio,
         )
 
-        # ----------------------------------------------------
-        # Upload to Cloudinary
-        # ----------------------------------------------------
-
         url = upload_audio(
             mixed_bytes,
             filename="mixed.wav",
         )
 
-        # ----------------------------------------------------
-        # Development user
-        # ----------------------------------------------------
-
         dev_user = get_or_create_development_user(db)
-
-        # ----------------------------------------------------
-        # Save audio record
-        # ----------------------------------------------------
 
         db_audio = AudioFile(
             title=title,
