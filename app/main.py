@@ -1,18 +1,11 @@
-from fastapi import (
-    FastAPI,
-    Depends,
-    HTTPException,
-    status,
-    UploadFile,
-    File,
-    Form,
-)
+from fastapi import (FastAPI,Depends,HTTPException,status,UploadFile,File,Form,)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
-
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 from app.database import engine, Base, get_db
 from app.models import User, AudioFile
 from app.schemas import (
