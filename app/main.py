@@ -2,7 +2,6 @@ from fastapi import (
     FastAPI,
     Depends,
     HTTPException,
-    status,
     UploadFile,
     File,
     Form,
@@ -52,9 +51,6 @@ app = FastAPI(title="AI Voice Platform API")
 # ============================================================
 # CORS
 # ============================================================
-app = FastAPI(title="AI Voice Platform API")
-
-from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
@@ -63,6 +59,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # ============================================================
 # STATIC FILES
@@ -103,9 +100,7 @@ def signup(
             detail="Username already registered",
         )
 
-    hashed_password = get_password_hash(
-        user_data.password
-    )
+    hashed_password = get_password_hash(user_data.password)
 
     new_user = User(
         username=user_data.username,
@@ -180,6 +175,7 @@ def generate_tts(
             filename="tts.wav",
         )
 
+        # Development/guest user
         dev_user = get_or_create_development_user(db)
 
         db_audio = AudioFile(
@@ -198,6 +194,7 @@ def generate_tts(
         return db_audio
 
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Speech generation failed: {str(e)}",
@@ -234,6 +231,7 @@ async def clone_voice_endpoint(
             filename="cloned.wav",
         )
 
+        # Development/guest user
         dev_user = get_or_create_development_user(db)
 
         db_audio = AudioFile(
@@ -252,6 +250,7 @@ async def clone_voice_endpoint(
         return db_audio
 
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Voice cloning failed: {str(e)}",
@@ -276,6 +275,7 @@ async def mix_voices_endpoint(
     db: Session = Depends(get_db),
 ):
     try:
+
         # Two uploaded audio files
         if audio1 and audio2:
             audio1_bytes = await audio1.read()
@@ -288,6 +288,7 @@ async def mix_voices_endpoint(
 
         # Generate two voices from text
         elif text and voice1 and voice2:
+
             audio1_bytes, _ = generate_speech(
                 text,
                 voice=voice1,
@@ -323,6 +324,7 @@ async def mix_voices_endpoint(
             filename="mixed.wav",
         )
 
+        # Development/guest user
         dev_user = get_or_create_development_user(db)
 
         db_audio = AudioFile(
@@ -344,6 +346,7 @@ async def mix_voices_endpoint(
         raise
 
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Speech blending failed: {str(e)}",
