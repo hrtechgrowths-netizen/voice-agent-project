@@ -64,3 +64,9 @@ def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session 
     if user is None:
         raise credentials_exception
     return user
+    def get_or_create_development_user(db=None):
+    """
+    Helper function to return or create a default development user.
+    """
+    # Add your development user logic here
+    pass
