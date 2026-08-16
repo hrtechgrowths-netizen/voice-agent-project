@@ -52,14 +52,17 @@ app = FastAPI(title="AI Voice Platform API")
 # CORS
 # ============================================================
 
+app = FastAPI()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=[
+        "https://voicetest112233.vercel.app/",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 # ============================================================
 # STATIC FILES
