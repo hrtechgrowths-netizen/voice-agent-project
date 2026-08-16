@@ -80,7 +80,7 @@ app.mount(
 
 
 # ============================================================
-# AUTH - SIGNUP
+# SIGNUP
 # ============================================================
 
 @app.post("/api/auth/signup", response_model=UserResponse)
@@ -115,7 +115,7 @@ def signup(
 
 
 # ============================================================
-# AUTH - LOGIN
+# LOGIN
 # ============================================================
 
 @app.post("/api/auth/login", response_model=Token)
@@ -175,8 +175,13 @@ def generate_tts(
             filename="tts.wav",
         )
 
-        # Development/guest user
         dev_user = get_or_create_development_user(db)
+
+        if dev_user is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Development user could not be created",
+            )
 
         db_audio = AudioFile(
             title=title,
@@ -192,6 +197,10 @@ def generate_tts(
         db.refresh(db_audio)
 
         return db_audio
+
+    except HTTPException:
+        db.rollback()
+        raise
 
     except Exception as e:
         db.rollback()
@@ -231,8 +240,13 @@ async def clone_voice_endpoint(
             filename="cloned.wav",
         )
 
-        # Development/guest user
         dev_user = get_or_create_development_user(db)
+
+        if dev_user is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Development user could not be created",
+            )
 
         db_audio = AudioFile(
             title=title,
@@ -248,6 +262,10 @@ async def clone_voice_endpoint(
         db.refresh(db_audio)
 
         return db_audio
+
+    except HTTPException:
+        db.rollback()
+        raise
 
     except Exception as e:
         db.rollback()
@@ -275,8 +293,7 @@ async def mix_voices_endpoint(
     db: Session = Depends(get_db),
 ):
     try:
-
-        # Two uploaded audio files
+        # Option 1: Two uploaded audio files
         if audio1 and audio2:
             audio1_bytes = await audio1.read()
             audio2_bytes = await audio2.read()
@@ -286,9 +303,8 @@ async def mix_voices_endpoint(
                 f"{audio2.filename}"
             )
 
-        # Generate two voices from text
+        # Option 2: Generate two voices from text
         elif text and voice1 and voice2:
-
             audio1_bytes, _ = generate_speech(
                 text,
                 voice=voice1,
@@ -324,8 +340,13 @@ async def mix_voices_endpoint(
             filename="mixed.wav",
         )
 
-        # Development/guest user
         dev_user = get_or_create_development_user(db)
+
+        if dev_user is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Development user could not be created",
+            )
 
         db_audio = AudioFile(
             title=title,
@@ -343,6 +364,7 @@ async def mix_voices_endpoint(
         return db_audio
 
     except HTTPException:
+        db.rollback()
         raise
 
     except Exception as e:
@@ -364,18 +386,34 @@ async def mix_voices_endpoint(
 def get_history(
     db: Session = Depends(get_db),
 ):
-    dev_user = get_or_create_development_user(db)
+    try:
+        dev_user = get_or_create_development_user(db)
 
-    return (
-        db.query(AudioFile)
-        .filter(AudioFile.user_id == dev_user.id)
-        .order_by(AudioFile.created_at.desc())
-        .all()
-    )
+        if dev_user is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Development user could not be created",
+            )
+
+        return (
+            db.query(AudioFile)
+            .filter(AudioFile.user_id == dev_user.id)
+            .order_by(AudioFile.created_at.desc())
+            .all()
+        )
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"History fetch failed: {str(e)}",
+        )
 
 
 # ============================================================
-# HEALTH CHECK
+# ROOT
 # ============================================================
 
 @app.get("/")
@@ -386,8 +424,12 @@ def root():
     }
 
 
+# ============================================================
+# HEALTH CHECK
+# ============================================================
+
 @app.get("/health")
 def health_check():
     return {
-        "status": "healthy"
+        "status": "healthy",
     }
