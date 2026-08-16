@@ -11,7 +11,6 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
-
 from app.database import engine, Base, get_db
 from app.models import User, AudioFile
 from app.schemas import (
@@ -27,47 +26,22 @@ from app.auth import (
     create_access_token,
     get_or_create_development_user,
 )
-
 from app.services.cloudinary_service import upload_audio
 from app.services.tts_service import generate_speech
 from app.services.voice_cloning_service import clone_voice
 from app.services.voice_mixing_service import blend_audio_waveforms
-
-
-# ============================================================
-# DATABASE
-# ============================================================
-
 Base.metadata.create_all(bind=engine)
-
-
-# ============================================================
-# FASTAPI APP
-# ============================================================
-
 app = FastAPI(title="AI Voice Platform API")
-
-
-# ============================================================
-# CORS
-# ============================================================
-
-app = FastAPI()
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://voicetest112233.vercel.app/",
+        "https://voice-agent-project-pst5-eq4g33gna.vercel.app",
+        "http://localhost:5173",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ============================================================
-# STATIC FILES
-# ============================================================
-
 static_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "static",
